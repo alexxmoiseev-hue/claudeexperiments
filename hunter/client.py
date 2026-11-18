@@ -38,12 +38,20 @@ class HunterClient:
         self.api_key = api_key
         self.timeout = timeout
 
-    def _get(self, path, **params):
-        params = {k: v for k, v in params.items() if v is not None}
-        params["api_key"] = self.api_key
-        url = f"{BASE_URL}/{path}?{urllib.parse.urlencode(params)}"
+    def _request(self, path, params=None, body=None):
+        # The key goes in a header rather than the query string so it never lands in URLs or logs.
+        params = {k: v for k, v in (params or {}).items() if v is not None}
+        url = f"{BASE_URL}/{path}"
+        if params:
+            url += "?" + urllib.parse.urlencode(params)
+        headers = {"X-API-KEY": self.api_key}
+        data = None
+        if body is not None:
+            data = json.dumps({k: v for k, v in body.items() if v is not None}).encode()
+            headers["Content-Type"] = "application/json"
+        req = urllib.request.Request(url, data=data, headers=headers)
         try:
-            with urllib.request.urlopen(url, timeout=self.timeout) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 return json.load(resp)["data"]
         except urllib.error.HTTPError as e:
             try:
@@ -51,6 +59,14 @@ class HunterClient:
             except ValueError:
                 errors = []
             raise HunterError(e.code, errors) from None
+
+    def _get(self, path, **params):
+        return self._request(path, params=params)
+
+    def discover(self, query=None, limit=100, offset=0, **filters):
+        """Find companies by a natural-language query and/or Discover filters (free, no credits used)."""
+        return self._request("discover", body={"query": query, "limit": limit,
+                                               "offset": offset or None, **filters})
 
     def domain_search(self, domain=None, company=None, limit=10, offset=0,
                       type=None, seniority=None, department=None):

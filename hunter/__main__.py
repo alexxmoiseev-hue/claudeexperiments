@@ -3,6 +3,7 @@ import json
 import sys
 
 from .client import HunterClient, HunterError
+from .leads import find_leads, write_csv
 
 
 def main(argv=None):
@@ -26,10 +27,30 @@ def main(argv=None):
     p = sub.add_parser("count", help="count emails for a domain")
     p.add_argument("domain")
 
+    p = sub.add_parser("discover", help="find companies matching a description (free)")
+    p.add_argument("query")
+    p.add_argument("--limit", type=int, default=20)
+
+    p = sub.add_parser("leads", help="find people at matching companies, as CSV on stdout")
+    p.add_argument("query")
+    p.add_argument("--companies", type=int, default=5)
+    p.add_argument("--per-company", type=int, default=3)
+    p.add_argument("--seniority", help="junior,senior,executive (comma-separated)")
+    p.add_argument("--department", help="e.g. executive,sales,marketing (comma-separated)")
+
     args = parser.parse_args(argv)
     client = HunterClient()
     try:
-        if args.command == "account":
+        if args.command == "leads":
+            rows = find_leads(client, args.query, companies=args.companies,
+                              per_company=args.per_company, seniority=args.seniority,
+                              department=args.department)
+            count = write_csv(rows)
+            print(f"{count} leads", file=sys.stderr)
+            return 0
+        if args.command == "discover":
+            data = client.discover(query=args.query, limit=args.limit)
+        elif args.command == "account":
             data = client.account()
         elif args.command == "domain-search":
             data = client.domain_search(args.domain, limit=args.limit)
